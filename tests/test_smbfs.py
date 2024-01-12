@@ -3,10 +3,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import io
-import shutil
-import sys
-import tempfile
-import time
+import platform
 import unittest
 import uuid
 
@@ -24,17 +21,19 @@ from .utils import mock
 
 
 @unittest.skipUnless(utils.DOCKER, "docker service unreachable.")
-class TestSMBFS(fs.test.FSTestCases, unittest.TestCase):
+class TestDirectTcp(fs.test.FSTestCases, unittest.TestCase):
+    DIRECT_TCP = True
 
     def make_fs(self):
+        self.OPEN_URL = utils.get_connection_url(direct_tcp=self.DIRECT_TCP)
         self.dir = fs.path.join('data', uuid.uuid4().hex)
-        self.smbfs = fs.open_fs('msmb://rio:letsdance@127.0.0.1/')
+        self.smbfs = fs.open_fs(self.OPEN_URL)
         self.smbfs.makedirs(self.dir, recreate=True)
         return self.smbfs.opendir(self.dir, factory=ClosingSubFS)
 
     @unittest.skip("the filesystem is not case sensitive")
     def test_case_sensitive(self):
-        super(TestSMBFS, self).test_case_sensitive()
+        super().test_case_sensitive()
 
     def test_connection_error(self):
         with utils.mock.patch('miarec_smbfs.smbfs.SMBFS.NETBIOS') as n:
@@ -45,14 +44,14 @@ class TestSMBFS(fs.test.FSTestCases, unittest.TestCase):
             )
 
     def test_write_denied(self):
-        _fs = fs.open_fs('msmb://127.0.0.1/data')
+        _fs = fs.open_fs(utils.get_connection_url(anonymous=True, dir='data', direct_tcp=self.DIRECT_TCP))
         self.assertRaises(
             fs.errors.PermissionDenied,
             _fs.openbin, '/test.txt', 'w'
         )
 
     def test_openbin_root(self):
-        _fs = fs.open_fs('msmb://rio:letsdance@127.0.0.1/')
+        _fs = fs.open_fs(self.OPEN_URL)
         self.assertRaises(
             fs.errors.ResourceNotFound,
             _fs.openbin, '/abc'
@@ -68,14 +67,14 @@ class TestSMBFS(fs.test.FSTestCases, unittest.TestCase):
             self.assertRaises(fs.errors.OperationFailed, self.fs.openbin, "abc")
 
     def test_makedir_root(self):
-        _fs = fs.open_fs('msmb://rio:letsdance@127.0.0.1/')
+        _fs = fs.open_fs(self.OPEN_URL)
         self.assertRaises(
             fs.errors.PermissionDenied,
             _fs.makedir, '/abc'
         )
 
     def test_removedir_root(self):
-        _fs = fs.open_fs('msmb://rio:letsdance@127.0.0.1/')
+        _fs = fs.open_fs(self.OPEN_URL)
 
         scandir = utils.mock.MagicMock(return_value=iter([]))
         with utils.mock.patch.object(_fs, 'scandir', scandir):
@@ -99,7 +98,7 @@ class TestSMBFS(fs.test.FSTestCases, unittest.TestCase):
         self.fs.remove('foo.txt')
 
     def test_makedir(self):
-        super(TestSMBFS, self).test_makedir()
+        super().test_makedir()
         self.fs.touch('abc')
         self.assertRaises(
             fs.errors.DirectoryExpected,
@@ -119,7 +118,7 @@ class TestSMBFS(fs.test.FSTestCases, unittest.TestCase):
         )
 
     def test_move(self):
-        super(TestSMBFS, self).test_move()
+        super().test_move()
         self.fs.touch('a')
         self.fs.touch('b')
         self.assertRaises(
@@ -134,7 +133,7 @@ class TestSMBFS(fs.test.FSTestCases, unittest.TestCase):
         )
 
     def test_openbin(self):
-        super(TestSMBFS, self).test_openbin()
+        super().test_openbin()
         self.fs.makedir('spam')
         self.assertRaises(
             fs.errors.FileExpected,
@@ -147,7 +146,7 @@ class TestSMBFS(fs.test.FSTestCases, unittest.TestCase):
         )
 
     def test_removedir(self):
-        super(TestSMBFS, self).test_removedir()
+        super().test_removedir()
         self.assertRaises(
             fs.errors.RemoveRootError,
             self.fs.delegate_fs().removedir, '/'
@@ -193,7 +192,7 @@ class TestSMBFS(fs.test.FSTestCases, unittest.TestCase):
         self.assertRaises(fs.errors.ResourceNotFound, self.fs.download, "/def/ghi", io.BytesIO())
 
     def test_upload_root(self):
-        _fs = fs.open_fs('msmb://rio:letsdance@127.0.0.1/')
+        _fs = fs.open_fs(self.OPEN_URL)
         self.assertRaises(fs.errors.PermissionDenied, _fs.upload, "/abc", io.BytesIO())
 
     def test_upload_error(self):
@@ -202,6 +201,13 @@ class TestSMBFS(fs.test.FSTestCases, unittest.TestCase):
         self.assertRaises(fs.errors.ResourceNotFound, self.fs.upload, "/def/ghi", io.BytesIO())
 
 
+@unittest.skipIf(platform.system() == "Windows", "Cannot test NETBIOS on Windows")
+@unittest.skipUnless(utils.DOCKER, "docker service unreachable.")
+class TestNETBIOS(TestDirectTcp):
+    DIRECT_TCP = False
+
+
+@unittest.skipIf(platform.system() == "Windows", "Cannot test NETBIOS on Windows")
 @unittest.skipUnless(utils.DOCKER, "docker service unreachable.")
 class TestSMBFSConnection(unittest.TestCase):
 
@@ -217,7 +223,6 @@ class TestSMBFSConnection(unittest.TestCase):
         except fs.errors.OperationFailed:
             self.fail("could not create a file")
 
-    @utils.py2expectedFailure
     def test_hostname(self):
         smbfs = self.open_smbfs("SAMBAALPINE")
         self.assert_connected(smbfs)
@@ -255,12 +260,10 @@ class TestSMBFSConnection(unittest.TestCase):
         smbfs = self.open_smbfs((None, "127.0.0.1"))
         self.assert_connected(smbfs)
 
-    @utils.py2expectedFailure
     def test_hostname_and_none(self):
         smbfs = self.open_smbfs(("SAMBAALPINE", None))
         self.assert_connected(smbfs)
 
-    @utils.py2expectedFailure
     def test_none_and_hostname(self):
         smbfs = self.open_smbfs((None, "SAMBAALPINE"))
         self.assert_connected(smbfs)
@@ -283,6 +286,6 @@ class TestSMBFSConnection(unittest.TestCase):
         self.assert_connected(smbfs)
 
     def test_explicit_smb_port(self):
-        smbfs = self.open_smbfs(("127.0.0.1", "SAMBAALPINE"), port=445, direct_tcp=True)
-        self.assertEqual(smbfs._smb.sock.getpeername()[1], 445)
+        smbfs = self.open_smbfs(("127.0.0.1", "SAMBAALPINE"), port=utils.DIRECT_TCP_PORT, direct_tcp=True)
+        self.assertEqual(smbfs._smb.sock.getpeername()[1], utils.DIRECT_TCP_PORT)
         self.assert_connected(smbfs)

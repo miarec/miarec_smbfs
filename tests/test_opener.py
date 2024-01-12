@@ -12,17 +12,18 @@ from semantic_version import Version
 
 from . import utils
 from .utils import mock
+import platform
 
 
 @unittest.skipUnless(utils.DOCKER, "docker service unreachable.")
 class TestSMBOpener(unittest.TestCase):
 
     @unittest.skipIf(utils.FSVERSION <= Version("2.0.7"), 'not supported')
+    @unittest.skipIf(platform.system() == "Windows", "Cannot test NETBIOS on Windows")
     def test_timeout_parameter(self):
         self.fs = fs.open_fs('msmb://rio:letsdance@127.0.0.1/data?timeout=5')
         self.assertEqual(self.fs.delegate_fs()._timeout, 5)
 
-    @utils.py2expectedFailure
     def test_bad_host(self):
         self.assertRaises(
             fs.errors.CreateFailed,
@@ -37,34 +38,40 @@ class TestSMBOpener(unittest.TestCase):
             'msmb://84.190.160.12/?timeout=2',
         )
 
-    @utils.py2expectedFailure
+    @unittest.skipIf(platform.system() == "Windows", "Cannot test NETBIOS on Windows")
     def test_host(self):
         self.fs = fs.open_fs('msmb://rio:letsdance@SAMBAALPINE/')
 
+    @unittest.skipIf(platform.system() == "Windows", "Cannot test NETBIOS on Windows")
     def test_ip(self):
         self.fs = fs.open_fs('msmb://rio:letsdance@127.0.0.1/')
 
+    @unittest.skipIf(platform.system() == "Windows", "Cannot test NETBIOS on Windows")
     @mock.patch.object(SMBFS, 'NETBIOS', mock.MagicMock())
     def test_hostname_and_ip(self):
         self.fs = fs.open_fs('msmb://rio:letsdance@127.0.0.1/?hostname=SAMBAALPINE')
         SMBFS.NETBIOS.queryIPforName.assert_not_called()
         SMBFS.NETBIOS.queryName.assert_not_called()
 
+    @unittest.skipIf(platform.system() == "Windows", "Cannot test NETBIOS on Windows")
     def test_default_smb_port(self):
         self.fs = fs.open_fs('msmb://rio:letsdance@127.0.0.1/')
 
         self.assertEqual(self.fs._smb.sock.getpeername()[1], 139)
 
     def test_explicit_smb_port(self):
-        self.fs = fs.open_fs('msmb://rio:letsdance@127.0.0.1:445/?direct-tcp=True')
+        url = utils.get_connection_url(direct_tcp=True)
+        self.fs = fs.open_fs(url)
 
-        self.assertEqual(self.fs._smb.sock.getpeername()[1], 445)
+        self.assertEqual(self.fs._smb.sock.getpeername()[1], utils.DIRECT_TCP_PORT)
 
     def test_create(self):
 
+        direct_tcp = platform.system() == "Windows"
+
         directory = "data/test/directory"
-        base = "msmb://rio:letsdance@127.0.0.1"
-        url = "{}/{}".format(base, directory)
+        base = utils.get_connection_url(direct_tcp=direct_tcp)
+        url = utils.get_connection_url(dir=directory, direct_tcp=direct_tcp)
 
         # Make sure unexisting directory raises `CreateFailed`
         with self.assertRaises(fs.errors.CreateFailed):
