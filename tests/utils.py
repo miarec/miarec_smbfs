@@ -52,11 +52,7 @@ def get_connection_url(anonymous=False, direct_tcp=False, dir=None):
         raise ValueError("On Windows, only direct_tcp is supported for unit testing")
 
     if direct_tcp:
-        if DIRECT_TCP_PORT == 445:
-            # default port can be ommited
-            host = f'127.0.0.1'
-        else:
-            host = f'127.0.0.1:{DIRECT_TCP_PORT}'
+        host = f'127.0.0.1:{DIRECT_TCP_PORT}'
     else:
         host = 'SAMBAALPINE'
 
