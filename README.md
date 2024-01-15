@@ -1,6 +1,6 @@
 # `miarec_smbfs` SMB filesystem for PyFilesystem2
 
-[![Actions](https://img.shields.io/github/actions/workflow/status/miarec/miarec_smbfs/test.yml?branch=master&logo=github&style=flat-square&maxAge=300)](https://github.com/miarec/miarec_smbfs/actions)
+[![Actions](https://img.shields.io/github/actions/workflow/status/miarec/miarec_smbfs/test_and_release.yml?branch=master&logo=github&style=flat-square&maxAge=300)](https://github.com/miarec/miarec_smbfs/actions)
 [![License](https://img.shields.io/pypi/l/fs.smbfs.svg?style=flat-square&maxAge=300)](https://choosealicense.com/licenses/mit/)
 
 
